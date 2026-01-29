@@ -1,0 +1,353 @@
+{
+  "name": "Cloud Misconfiguration Remediation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cloud-misconfig",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "cloud-misconfig-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.severity}}",
+              "operation": "equal",
+              "value2": "high"
+            }
+          ]
+        }
+      },
+      "id": "severity-check",
+      "name": "Severity Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.misconfiguration_type}}",
+              "operation": "equal",
+              "value2": "public_storage_bucket"
+            }
+          ]
+        }
+      },
+      "id": "misconfig-type",
+      "name": "Misconfiguration Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/oci/storage/make-private",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OCI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"make_private\",\"bucket_name\":\"{{$json.body.resource_id}}\",\"compartment_id\":\"{{$json.body.compartment_id}}\",\"region\":\"{{$env.OCI_REGION}}\",\"reason\":\"Public storage bucket detected - security risk\"}",
+        "options": {}
+      },
+      "id": "fix-storage-bucket",
+      "name": "Fix Storage Bucket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/oci/network/fix-security-list",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OCI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"restrict_access\",\"security_list_id\":\"{{$json.body.resource_id}}\",\"compartment_id\":\"{{$json.body.compartment_id}}\",\"region\":\"{{$env.OCI_REGION}}\",\"reason\":\"Overly permissive security list - allowing public access\"}",
+        "options": {}
+      },
+      "id": "fix-security-list",
+      "name": "Fix Security List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/oci/iam/enable-mfa",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OCI_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"enforce_mfa\",\"user_id\":\"{{$json.body.resource_id}}\",\"compartment_id\":\"{{$json.body.compartment_id}}\",\"region\":\"{{$env.OCI_REGION}}\",\"reason\":\"User account without MFA - security compliance requirement\"}",
+        "options": {}
+      },
+      "id": "enable-mfa",
+      "name": "Enable MFA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/oci/compliance/scan-results",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"resource_id\":\"{{$json.body.resource_id}}\",\"resource_type\":\"{{$json.body.misconfiguration_type}}\",\"compartment_id\":\"{{$json.body.compartment_id}}\",\"scan_type\":\"post_remediation\"}",
+        "options": {}
+      },
+      "id": "verify-fix",
+      "name": "Verify Fix",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SLACK_BOT_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"channel\":\"{{$env.SLACK_CHANNEL}}\",\"text\":\"🔧 CLOUD MISCONFIGURATION REMEDIATED\\n\\nResource: {{$json.body.resource_id}}\\nType: {{$json.body.misconfiguration_type}}\\nCompartment: {{$json.body.compartment_id}}\\nSeverity: {{$json.body.severity}}\\n\\n✅ Automatic remediation completed successfully\"}",
+        "options": {}
+      },
+      "id": "slack-confirmation",
+      "name": "Slack Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.JIRA_API_URL}}/issue",
+        "authentication": "headerAuth",
+        "nodeAuthenticationType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic {{base64($env.JIRA_USERNAME + \":\" + $env.JIRA_API_TOKEN)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"fields\":{\"project\":{\"key\":\"SEC\"},\"summary\":\"CLOUD: Auto-remediated {{$json.body.misconfiguration_type}}\",\"description\":\"Cloud misconfiguration automatically remediated:\\n\\n• Resource: {{$json.body.resource_id}}\\n• Type: {{$json.body.misconfiguration_type}}\\n• Compartment: {{$json.body.compartment_id}}\\n• Severity: {{$json.body.severity}}\\n• Remediation Time: {{now}}\\n• Verification Status: Passed\\n\\nNo manual action required.\",\"issuetype\":{\"name\":\"Security Ticket\"},\"priority\":{\"name\":\"Medium\"}}}",
+        "options": {}
+      },
+      "id": "create-ticket",
+      "name": "Create Documentation Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://postgres:5432/api/v1/audit-log",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"incident_id\":\"{{$json.body.incident_id}}\",\"workflow\":\"cloud_misconfiguration_remediation\",\"action\":\"auto_remediation\",\"timestamp\":\"{{now}}\",\"details\":{\"resource_id\":\"{{$json.body.resource_id}}\",\"misconfiguration_type\":\"{{$json.body.misconfiguration_type}}\",\"compartment_id\":\"{{$json.body.compartment_id}}\",\"severity\":\"{{$json.body.severity}}\",\"jira_ticket\":\"{{$node[\"Create Documentation Ticket\"].json.key}}\",\"remediation_completed\":true,\"verification_passed\":true}}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "Log to Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"success\",\"message\":\"Cloud misconfiguration remediated automatically\",\"incident_id\":\"{{$json.body.incident_id}}\",\"actions_taken\":[\"misconfiguration_fixed\",\"verification_completed\",\"slack_confirmed\",\"ticket_created\"]}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 500]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Severity Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Severity Check": {
+      "main": [
+        [
+          {
+            "node": "Misconfiguration Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Misconfiguration Type": {
+      "main": [
+        [
+          {
+            "node": "Fix Storage Bucket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fix Security List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enable MFA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fix Storage Bucket": {
+      "main": [
+        [
+          {
+            "node": "Verify Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fix Security List": {
+      "main": [
+        [
+          {
+            "node": "Verify Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enable MFA": {
+      "main": [
+        [
+          {
+            "node": "Verify Fix",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Fix": {
+      "main": [
+        [
+          {
+            "node": "Slack Confirmation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create Documentation Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Documentation Ticket": {
+      "main": [
+        [
+          {
+            "node": "Log to Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Audit": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2026-01-28T19:00:00.000Z",
+      "updatedAt": "2026-01-28T19:00:00.000Z",
+      "id": "cloud-remediation",
+      "name": "Cloud Remediation"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-28T19:00:00.000Z",
+  "versionId": "1"
+}

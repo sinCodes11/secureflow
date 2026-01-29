@@ -1,0 +1,315 @@
+{
+  "name": "Brute Force Attack Mitigation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brute-force",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "brute-force-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.failed_attempts}}",
+              "operation": "largerEqual",
+              "value2": "5"
+            }
+          ]
+        }
+      },
+      "id": "threshold-check",
+      "name": "Threshold Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/abuseipdb",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Key",
+              "value": "={{$env.ABUSEIPDB_API_KEY}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ipAddress",
+              "value": "={{$json.body.source_ip}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ip-reputation",
+      "name": "IP Reputation Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "or": [
+            {
+              "string": [
+                {
+                  "value1": "={{$json.data.abuseConfidenceScore}}",
+                  "operation": "larger",
+                  "value2": "50"
+                }
+              ]
+            },
+            {
+              "string": [
+                {
+                  "value1": "={{$json.body.failed_attempts}}",
+                  "operation": "largerEqual",
+                  "value2": "10"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "id": "threat-assessment",
+      "name": "Threat Assessment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/firewall/block-ip",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"block_ip\",\"ip_address\":\"{{$json.body.source_ip}}\",\"duration\":\"24h\",\"reason\":\"Brute force attack detected - {{$json.body.failed_attempts}} failed attempts\",\"confidence_score\":{{$json.data.abuseConfidenceScore}}}",
+        "options": {}
+      },
+      "id": "block-ip",
+      "name": "Block IP Address",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/auth/lock-account",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"lock_account\",\"username\":\"{{$json.body.target_user}}\",\"reason\":\"Brute force attack from IP: {{$json.body.source_ip}}\",\"duration\":\"1h\"}",
+        "options": {}
+      },
+      "id": "lock-account",
+      "name": "Lock Target Account",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SLACK_BOT_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"channel\":\"{{$env.SLACK_CHANNEL}}\",\"text\":\"🚨 BRUTE FORCE ATTACK DETECTED\\n\\nSource IP: {{$json.body.source_ip}}\\nTarget User: {{$json.body.target_user}}\\nFailed Attempts: {{$json.body.failed_attempts}}\\nIP Reputation Score: {{$json.data.abuseConfidenceScore}}%\\n\\nActions Taken: IP Blocked, Account Locked\"}",
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.JIRA_API_URL}}/issue",
+        "authentication": "headerAuth",
+        "nodeAuthenticationType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic {{base64($env.JIRA_USERNAME + \":\" + $env.JIRA_API_TOKEN)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"fields\":{\"project\":{\"key\":\"SEC\"},\"summary\":\"BRUTE FORCE: Attack from {{$json.body.source_ip}}\",\"description\":\"Brute force attack detected with the following details:\\n\\n• Source IP: {{$json.body.source_ip}}\\n• Target User: {{$json.body.target_user}}\\n• Failed Attempts: {{$json.body.failed_attempts}}\\n• IP Reputation Score: {{$json.data.abuseConfidenceScore}}%\\n• Attack Duration: {{$json.body.attack_duration}} minutes\\n\\nAutomatic response has been executed.\",\"issuetype\":{\"name\":\"Security Incident\"},\"priority\":{\"name\":\"High\"}}}",
+        "options": {}
+      },
+      "id": "create-ticket",
+      "name": "Create Jira Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://postgres:5432/api/v1/audit-log",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"incident_id\":\"{{$json.body.incident_id}}\",\"workflow\":\"brute_force_mitigation\",\"action\":\"ip_blocking\",\"timestamp\":\"{{now}}\",\"details\":{\"source_ip\":\"{{$json.body.source_ip}}\",\"target_user\":\"{{$json.body.target_user}}\",\"failed_attempts\":{{$json.body.failed_attempts}},\"ip_reputation_score\":{{$json.data.abuseConfidenceScore}},\"jira_ticket\":\"{{$node[\"Create Jira Ticket\"].json.key}}\",\"ip_blocked\":true,\"account_locked\":true}}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "Log to Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"success\",\"message\":\"Brute force attack mitigated\",\"incident_id\":\"{{$json.body.incident_id}}\",\"actions_taken\":[\"ip_blocked\",\"account_locked\",\"slack_alerted\",\"ticket_created\"]}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Threshold Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threshold Check": {
+      "main": [
+        [
+          {
+            "node": "IP Reputation Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP Reputation Check": {
+      "main": [
+        [
+          {
+            "node": "Threat Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threat Assessment": {
+      "main": [
+        [
+          {
+            "node": "Block IP Address",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lock Target Account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block IP Address": {
+      "main": [
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock Target Account": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Ticket": {
+      "main": [
+        [
+          {
+            "node": "Log to Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Audit": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2026-01-28T19:00:00.000Z",
+      "updatedAt": "2026-01-28T19:00:00.000Z",
+      "id": "brute-force",
+      "name": "Brute Force"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-28T19:00:00.000Z",
+  "versionId": "1"
+}

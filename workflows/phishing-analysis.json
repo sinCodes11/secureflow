@@ -1,0 +1,377 @@
+{
+  "name": "Phishing Email Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "phishing-analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "phishing-analysis-webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/virustotal/url",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-apikey",
+              "value": "={{$env.VIRUSTOTAL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"url\":\"{{$json.body.suspicious_url}}\"}",
+        "options": {}
+      },
+      "id": "url-analysis",
+      "name": "URL Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/email/sender-analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"email_address\":\"{{$json.body.sender_email}}\",\"domain\":\"{{$json.body.sender_domain}}\",\"headers\":{{$json.body.email_headers}}}",
+        "options": {}
+      },
+      "id": "sender-verification",
+      "name": "Sender Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/email/content-analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"email_body\":\"{{$json.body.email_body}}\",\"subject\":\"{{$json.body.subject}}\",\"analysis_types\":[\"phishing_keywords\",\"urgency_language\",\"brand_impersonation\",\"attachment_safety\"]}",
+        "options": {}
+      },
+      "id": "content-analysis",
+      "name": "Content Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "or": [
+            {
+              "string": [
+                {
+                  "value1": "={{$json.malicious}}",
+                  "operation": "equal",
+                  "value2": "true"
+                }
+              ]
+            },
+            {
+              "string": [
+                {
+                  "value1": "={{$json.suspicious_score}}",
+                  "operation": "larger",
+                  "value2": "0.7"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "id": "threat-assessment",
+      "name": "Threat Assessment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/email/quarantine",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"quarantine\",\"email_id\":\"{{$json.body.email_id}}\",\"reason\":\"Phishing email detected\",\"threat_score\":{{$json.suspicious_score}},\"sender\":\"{{$json.body.sender_email}}\"}",
+        "options": {}
+      },
+      "id": "quarantine-email",
+      "name": "Quarantine Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/email/block-sender",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"block_sender\",\"sender_email\":\"{{$json.body.sender_email}}\",\"sender_domain\":\"{{$json.body.sender_domain}}\",\"reason\":\"Phishing campaign detected\",\"duration\":\"permanent\"}",
+        "options": {}
+      },
+      "id": "block-sender",
+      "name": "Block Sender",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/users/notify-targets",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"warn_users\",\"target_users\":{{$json.body.recipients}},\"threat_type\":\"phishing\",\"sender_email\":\"{{$json.body.sender_email}}\",\"subject\":\"{{$json.body.subject}}\",\"warning_level\":\"high\"}",
+        "options": {}
+      },
+      "id": "notify-users",
+      "name": "Notify Target Users",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SLACK_BOT_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"channel\":\"{{$env.SLACK_CHANNEL}}\",\"text\":\"🎣 PHISHING EMAIL DETECTED\\n\\nSender: {{$json.body.sender_email}}\\nSubject: {{$json.body.subject}}\\nSuspicious URL: {{$json.body.suspicious_url}}\\nThreat Score: {{$json.suspicious_score}}\\nRecipients: {{$json.body.recipients.length}} users\\n\\nActions: Email quarantined, sender blocked, users warned\"}",
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.JIRA_API_URL}}/issue",
+        "authentication": "headerAuth",
+        "nodeAuthenticationType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic {{base64($env.JIRA_USERNAME + \":\" + $env.JIRA_API_TOKEN)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"fields\":{\"project\":{\"key\":\"SEC\"},\"summary\":\"PHISHING: Campaign from {{$json.body.sender_email}}\",\"description\":\"Phishing email campaign detected and mitigated:\\n\\n• Sender: {{$json.body.sender_email}}\\n• Subject: {{$json.body.subject}}\\n• Suspicious URL: {{$json.body.suspicious_url}}\\n• Threat Score: {{$json.suspicious_score}}\\n• Recipients: {{$json.body.recipients.length}} users\\n• Email Quarantined: Yes\\n• Sender Blocked: Yes\\n\\nAutomatic response completed.\",\"issuetype\":{\"name\":\"Security Incident\"},\"priority\":{\"name\":\"High\"}}}",
+        "options": {}
+      },
+      "id": "create-ticket",
+      "name": "Create Jira Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 700]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/security/awareness-update",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"update_awareness\",\"threat_type\":\"phishing\",\"campaign_details\":{\"sender\":\"{{$json.body.sender_email}}\",\"subject\":\"{{$json.body.subject}}\",\"url_pattern\":\"{{$json.body.suspicious_url}}\"},\"recommendation\":\"Add to security awareness training\"}",
+        "options": {}
+      },
+      "id": "awareness-update",
+      "name": "Security Awareness Update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 900]
+    },
+    {
+      "parameters": {
+        "url": "http://postgres:5432/api/v1/audit-log",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"incident_id\":\"{{$json.body.incident_id}}\",\"workflow\":\"phishing_email_analysis\",\"action\":\"threat_mitigation\",\"timestamp\":\"{{now}}\",\"details\":{\"sender_email\":\"{{$json.body.sender_email}}\",\"subject\":\"{{$json.body.subject}}\",\"suspicious_url\":\"{{$json.body.suspicious_url}}\",\"threat_score\":{{$json.suspicious_score}},\"recipients_count\":{{$json.body.recipients.length}},\"jira_ticket\":\"{{$node[\"Create Jira Ticket\"].json.key}}\",\"email_quarantined\":true,\"sender_blocked\":true,\"users_warned\":true}}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "Log to Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"success\",\"message\":\"Phishing email analyzed and mitigated\",\"incident_id\":\"{{$json.body.incident_id}}\",\"actions_taken\":[\"url_analyzed\",\"sender_verified\",\"content_analyzed\",\"email_quarantined\",\"sender_blocked\",\"users_warned\",\"slack_alerted\",\"ticket_created\",\"awareness_updated\"]}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 700]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "URL Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Sender Verification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Content Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "URL Analysis": {
+      "main": [
+        [
+          {
+            "node": "Threat Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sender Verification": {
+      "main": [
+        [
+          {
+            "node": "Threat Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Analysis": {
+      "main": [
+        [
+          {
+            "node": "Threat Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threat Assessment": {
+      "main": [
+        [
+          {
+            "node": "Quarantine Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Block Sender",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Target Users",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quarantine Email": {
+      "main": [
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block Sender": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Target Users": {
+      "main": [
+        [
+          {
+            "node": "Security Awareness Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Ticket": {
+      "main": [
+        [
+          {
+            "node": "Log to Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Audit": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2026-01-28T19:00:00.000Z",
+      "updatedAt": "2026-01-28T19:00:00.000Z",
+      "id": "phishing-analysis",
+      "name": "Phishing Analysis"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-28T19:00:00.000Z",
+  "versionId": "1"
+}

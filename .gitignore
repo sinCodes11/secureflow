@@ -1,0 +1,11 @@
+# Ignore credentials and sensitive files
+credentials.txt
+.env
+*.log
+__pycache__/
+*.pyc
+test-data/
+logs/
+data/
+backups/
+exports/

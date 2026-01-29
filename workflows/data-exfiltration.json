@@ -1,0 +1,349 @@
+{
+  "name": "Data Exfiltration Investigation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "data-exfiltration",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "data-exfiltration-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.data_volume_gb}}",
+              "operation": "larger",
+              "value2": "1"
+            }
+          ]
+        }
+      },
+      "id": "volume-check",
+      "name": "Data Volume Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/network/traffic-analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"source_ip\":\"{{$json.body.source_ip}}\",\"destination_ip\":\"{{$json.body.destination_ip}}\",\"time_range\":\"1h\",\"protocol\":\"{{$json.body.protocol}}\"}",
+        "options": {}
+      },
+      "id": "traffic-analysis",
+      "name": "Traffic Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/user/behavior-analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"user_id\":\"{{$json.body.user_id}}\",\"time_range\":\"24h\",\"anomaly_types\":[\"data_access\",\"network_activity\",\"login_pattern\"]}",
+        "options": {}
+      },
+      "id": "user-behavior",
+      "name": "User Behavior Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "or": [
+            {
+              "string": [
+                {
+                  "value1": "={{$json.anomaly_score}}",
+                  "operation": "larger",
+                  "value2": "0.8"
+                }
+              ]
+            },
+            {
+              "string": [
+                {
+                  "value1": "={{$json.suspicious_indicators}}",
+                  "operation": "larger",
+                  "value2": "3"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "id": "anomaly-assessment",
+      "name": "Anomaly Assessment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/dlp/blocked-downloads",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"block_downloads\",\"user_id\":\"{{$json.body.user_id}}\",\"duration\":\"6h\",\"reason\":\"Potential data exfiltration detected\",\"exceptions\":[\"whitelisted_domains\"]}",
+        "options": {}
+      },
+      "id": "block-downloads",
+      "name": "Block Downloads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/forensics/preserve-evidence",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"incident_id\":\"{{$json.body.incident_id}}\",\"user_id\":\"{{$json.body.user_id}}\",\"source_ip\":\"{{$json.body.source_ip}}\",\"data_volume_gb\":{{$json.body.data_volume_gb}},\"evidence_types\":[\"logs\",\"network_packets\",\"file_access\",\"memory_dump\"]}",
+        "options": {}
+      },
+      "id": "preserve-evidence",
+      "name": "Preserve Forensic Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SLACK_BOT_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"channel\":\"{{$env.SLACK_CHANNEL}}\",\"text\":\"🚨 DATA EXFILTRATION DETECTED\\n\\nUser: {{$json.body.user_id}}\\nSource IP: {{$json.body.source_ip}}\\nDestination: {{$json.body.destination_ip}}\\nData Volume: {{$json.body.data_volume_gb}} GB\\nProtocol: {{$json.body.protocol}}\\nAnomaly Score: {{$json.anomaly_score}}\\n\\nActions: Downloads blocked, evidence preserved\"}",
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.JIRA_API_URL}}/issue",
+        "authentication": "headerAuth",
+        "nodeAuthenticationType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic {{base64($env.JIRA_USERNAME + \":\" + $env.JIRA_API_TOKEN)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"fields\":{\"project\":{\"key\":\"SEC\"},\"summary\":\"CRITICAL: Data Exfiltration - User {{$json.body.user_id}}\",\"description\":\"Data exfiltration incident detected with the following details:\\n\\n• User ID: {{$json.body.user_id}}\\n• Source IP: {{$json.body.source_ip}}\\n• Destination IP: {{$json.body.destination_ip}}\\n• Data Volume: {{$json.body.data_volume_gb}} GB\\n• Protocol: {{$json.body.protocol}}\\n• Anomaly Score: {{$json.anomaly_score}}\\n• Suspicious Indicators: {{$json.suspicious_indicators}}\\n\\nImmediate investigation required. Evidence has been preserved.\",\"issuetype\":{\"name\":\"Security Incident\"},\"priority\":{\"name\":\"Highest\"}}}",
+        "options": {}
+      },
+      "id": "create-ticket",
+      "name": "Create Jira Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/notify/security-team",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"notification_type\":\"critical_incident\",\"recipients\":[\"security-team@company.com\",\"forensics@company.com\"],\"subject\":\"URGENT: Data Exfiltration Investigation\",\"message\":\"Critical data exfiltration detected. User: {{$json.body.user_id}}, Volume: {{$json.body.data_volume_gb}}GB. Immediate forensic analysis required.\"}",
+        "options": {}
+      },
+      "id": "notify-forensics",
+      "name": "Notify Forensics Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 600]
+    },
+    {
+      "parameters": {
+        "url": "http://postgres:5432/api/v1/audit-log",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"incident_id\":\"{{$json.body.incident_id}}\",\"workflow\":\"data_exfiltration_investigation\",\"action\":\"forensic_preservation\",\"timestamp\":\"{{now}}\",\"details\":{\"user_id\":\"{{$json.body.user_id}}\",\"source_ip\":\"{{$json.body.source_ip}}\",\"destination_ip\":\"{{$json.body.destination_ip}}\",\"data_volume_gb\":{{$json.body.data_volume_gb}},\"anomaly_score\":{{$json.anomaly_score}},\"jira_ticket\":\"{{$node[\"Create Jira Ticket\"].json.key}}\",\"downloads_blocked\":true,\"evidence_preserved\":true,\"forensics_notified\":true}}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "Log to Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"success\",\"message\":\"Data exfiltration investigation initiated\",\"incident_id\":\"{{$json.body.incident_id}}\",\"actions_taken\":[\"downloads_blocked\",\"evidence_preserved\",\"slack_alerted\",\"ticket_created\",\"forensics_notified\"]}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Data Volume Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Volume Check": {
+      "main": [
+        [
+          {
+            "node": "Traffic Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "User Behavior Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traffic Analysis": {
+      "main": [
+        [
+          {
+            "node": "Anomaly Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Behavior Analysis": {
+      "main": [
+        [
+          {
+            "node": "Anomaly Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anomaly Assessment": {
+      "main": [
+        [
+          {
+            "node": "Block Downloads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preserve Forensic Evidence",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Forensics Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Block Downloads": {
+      "main": [
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve Forensic Evidence": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Ticket": {
+      "main": [
+        [
+          {
+            "node": "Log to Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Audit": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2026-01-28T19:00:00.000Z",
+      "updatedAt": "2026-01-28T19:00:00.000Z",
+      "id": "data-exfiltration",
+      "name": "Data Exfiltration"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-28T19:00:00.000Z",
+  "versionId": "1"
+}

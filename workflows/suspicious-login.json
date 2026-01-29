@@ -1,0 +1,404 @@
+{
+  "name": "Suspicious Login Investigation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "suspicious-login",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "suspicious-login-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.risk_score}}",
+              "operation": "larger",
+              "value2": "0.7"
+            }
+          ]
+        }
+      },
+      "id": "risk-assessment",
+      "name": "Risk Assessment",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/geo/location-analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"ip_address\":\"{{$json.body.source_ip}}\",\"user_id\":\"{{$json.body.user_id}}\",\"compare_with_known_locations\":true,\"time_window\":\"30d\"}",
+        "options": {}
+      },
+      "id": "geo-analysis",
+      "name": "Geolocation Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/device/fingerprint-analysis",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"user_id\":\"{{$json.body.user_id}}\",\"device_fingerprint\":\"{{$json.body.device_fingerprint}}\",\"user_agent\":\"{{$json.body.user_agent}}\",\"compare_with_history\":true,\"time_window\":\"90d\"}",
+        "options": {}
+      },
+      "id": "device-analysis",
+      "name": "Device Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/user/behavior-pattern",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"user_id\":\"{{$json.body.user_id}}\",\"login_time\":\"{{$json.body.timestamp}}\",\"login_method\":\"{{$json.body.auth_method}}\",\"analysis_types\":[\"time_patterns\",\"location_patterns\",\"device_patterns\",\"behavior_anomalies\"]}",
+        "options": {}
+      },
+      "id": "behavior-pattern",
+      "name": "Behavior Pattern Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "or": [
+            {
+              "string": [
+                {
+                  "value1": "={{$json.anomaly_score}}",
+                  "operation": "larger",
+                  "value2": "0.8"
+                }
+              ]
+            },
+            {
+              "string": [
+                {
+                  "value1": "={{$json.high_risk_country}}",
+                  "operation": "equal",
+                  "value2": "true"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "id": "threat-verification",
+      "name": "Threat Verification",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/auth/force-mfa",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"require_mfa\",\"user_id\":\"{{$json.body.user_id}}\",\"session_id\":\"{{$json.body.session_id}}\",\"reason\":\"Suspicious login detected from new location/device\",\"mfa_methods\":[\"totp\",\"sms\",\"push\"]}",
+        "options": {}
+      },
+      "id": "force-mfa",
+      "name": "Force MFA Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/auth/terminate-session",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"terminate_session\",\"user_id\":\"{{$json.body.user_id}}\",\"session_id\":\"{{$json.body.session_id}}\",\"reason\":\"Highly suspicious login detected\",\"reauth_required\":true}",
+        "options": {}
+      },
+      "id": "terminate-session",
+      "name": "Terminate Suspicious Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/user/notify-security-team",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"security_alert\",\"user_id\":\"{{$json.body.user_id}}\",\"risk_score\":{{$json.body.risk_score}},\"source_ip\":\"{{$json.body.source_ip}}\",\"location\":\"{{$json.location.country}}\",\"device_info\":\"{{$json.device_fingerprint}}\",\"recommendation\":\"immediate_contact\"}",
+        "options": {}
+      },
+      "id": "notify-security",
+      "name": "Notify Security Team",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "slack/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.SLACK_BOT_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"channel\":\"{{$env.SLACK_CHANNEL}}\",\"text\":\"🔐 SUSPICIOUS LOGIN DETECTED\\n\\nUser: {{$json.body.user_id}}\\nSource IP: {{$json.body.source_ip}}\\nLocation: {{$json.location.country}} ({{$json.location.city}})\\nDevice: New/Unrecognized\\nRisk Score: {{$json.body.risk_score}}\\nAnomaly Score: {{$json.anomaly_score}}\\n\\nActions: MFA enforced, session terminated, security notified\"}",
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 500]
+    },
+    {
+      "parameters": {
+        "url": "http://mock-apis:8000/api/user/send-verification-alert",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"action\":\"user_notification\",\"user_id\":\"{{$json.body.user_id}}\",\"alert_type\":\"suspicious_login\",\"login_details\":{\"timestamp\":\"{{$json.body.timestamp}}\",\"location\":\"{{$json.location.country}}\",\"device\":\"Unrecognized device\"},\"recommended_action\":\"verify_if_this_was_you\"}",
+        "options": {}
+      },
+      "id": "notify-user",
+      "name": "Notify User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 700]
+    },
+    {
+      "parameters": {
+        "url": "{{$env.JIRA_API_URL}}/issue",
+        "authentication": "headerAuth",
+        "nodeAuthenticationType": "headerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Basic {{base64($env.JIRA_USERNAME + \":\" + $env.JIRA_API_TOKEN)}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"fields\":{\"project\":{\"key\":\"SEC\"},\"summary\":\"SUSPICIOUS LOGIN: User {{$json.body.user_id}}\",\"description\":\"Suspicious login detected and investigated:\\n\\n• User ID: {{$json.body.user_id}}\\n• Source IP: {{$json.body.source_ip}}\\n• Location: {{$json.location.country}} ({{$json.location.city}})\\n• Risk Score: {{$json.body.risk_score}}\\n• Anomaly Score: {{$json.anomaly_score}}\\n• Device: New/Unrecognized\\n• Actions Taken: MFA enforced, session terminated\\n\\nSecurity team has been notified.\",\"issuetype\":{\"name\":\"Security Incident\"},\"priority\":{\"name\":\"Medium\"}}}",
+        "options": {}
+      },
+      "id": "create-ticket",
+      "name": "Create Jira Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 900]
+    },
+    {
+      "parameters": {
+        "url": "http://postgres:5432/api/v1/audit-log",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\"incident_id\":\"{{$json.body.incident_id}}\",\"workflow\":\"suspicious_login_investigation\",\"action\":\"security_enforcement\",\"timestamp\":\"{{now}}\",\"details\":{\"user_id\":\"{{$json.body.user_id}}\",\"source_ip\":\"{{$json.body.source_ip}}\",\"location\":\"{{$json.location.country}}\",\"risk_score\":{{$json.body.risk_score}},\"anomaly_score\":{{$json.anomaly_score}},\"jira_ticket\":\"{{$node[\"Create Jira Ticket\"].json.key}}\",\"mfa_enforced\":true,\"session_terminated\":true,\"security_notified\":true,\"user_notified\":true}}",
+        "options": {}
+      },
+      "id": "audit-log",
+      "name": "Log to Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1560, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\":\"success\",\"message\":\"Suspicious login investigated and mitigated\",\"incident_id\":\"{{$json.body.incident_id}}\",\"actions_taken\":[\"geo_analyzed\",\"device_analyzed\",\"behavior_analyzed\",\"mfa_enforced\",\"session_terminated\",\"security_notified\",\"user_notified\",\"slack_alerted\",\"ticket_created\"]}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 700]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Geolocation Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Device Analysis",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Behavior Pattern Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geolocation Analysis": {
+      "main": [
+        [
+          {
+            "node": "Threat Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Device Analysis": {
+      "main": [
+        [
+          {
+            "node": "Threat Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Behavior Pattern Analysis": {
+      "main": [
+        [
+          {
+            "node": "Threat Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threat Verification": {
+      "main": [
+        [
+          {
+            "node": "Force MFA Verification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Terminate Suspicious Session",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Security Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Force MFA Verification": {
+      "main": [
+        [
+          {
+            "node": "Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Terminate Suspicious Session": {
+      "main": [
+        [
+          {
+            "node": "Notify User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify User": {
+      "main": [
+        [
+          {
+            "node": "Create Jira Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Jira Ticket": {
+      "main": [
+        [
+          {
+            "node": "Log to Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Audit": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": {},
+  "tags": [
+    {
+      "createdAt": "2026-01-28T19:00:00.000Z",
+      "updatedAt": "2026-01-28T19:00:00.000Z",
+      "id": "suspicious-login",
+      "name": "Suspicious Login"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2026-01-28T19:00:00.000Z",
+  "versionId": "1"
+}
