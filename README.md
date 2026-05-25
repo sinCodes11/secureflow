@@ -4,6 +4,11 @@
   <img src="assets/logo.svg" width="200" height="200" />
 </div>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/n8n-workflow-00b4d8?style=flat-square" alt="n8n">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
+</p>
+
 ## Purpose
 Automated security incident response orchestration platform that processes alerts from multiple sources, enriches with threat intelligence, and executes response playbooks via n8n workflows with sub-5-second response times.
 
