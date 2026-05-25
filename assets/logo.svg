@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d1117"/>
+      <stop offset="100%" style="stop-color:#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ff88"/>
+      <stop offset="100%" style="stop-color:#00b4d8"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="200" height="200" rx="32" fill="url(#bg)"/>
+  <g transform="translate(100,100)">
+    <!-- Pipeline flow path -->
+    <path d="M-60,0 Q-30,-30 0,0 Q30,30 60,0" fill="none" stroke="#30363d" stroke-width="3"/>
+    <path d="M-60,0 Q-30,-30 0,0 Q30,30 60,0" fill="none" stroke="url(#accent)" stroke-width="3" stroke-dasharray="8 12">
+      <animate attributeName="stroke-dashoffset" from="0" to="-40" dur="1s" repeatCount="indefinite"/>
+    </path>
+    <!-- Flow nodes -->
+    <circle cx="-60" cy="0" r="6" fill="#00ff88" filter="url(#glow)"/>
+    <circle cx="0" cy="0" r="6" fill="#00b4d8" filter="url(#glow)"/>
+    <circle cx="60" cy="0" r="6" fill="#00ff88" filter="url(#glow)"/>
+    <!-- Checkmark on middle node -->
+    <path d="M-3,0 L0,3 L5,-3" fill="none" stroke="#0d1117" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Data packets flowing -->
+    <circle r="3" fill="#00ff88" opacity="0.8">
+      <animate attributeName="cx" values="-40;40" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="-20;20" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle r="2.5" fill="#00b4d8" opacity="0.8">
+      <animate attributeName="cx" values="-30;50" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="cy" values="-15;25" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.6;0" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <!-- Security shield behind -->
+    <g transform="translate(0,-50) scale(0.6)" opacity="0.2">
+      <path d="M-20,0 L-20,20 Q-20,40 0,50 Q20,40 20,20 L20,0 Q10,-10 0,-20 Q-10,-10-20,0Z" fill="#00ff88"/>
+      <path d="M-8,12 L0,20 L8,5" fill="none" stroke="#0d1117" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <!-- Pulsing security dots around shield -->
+    <circle cx="-15" cy="-50" r="2" fill="#00ff88">
+      <animate attributeName="r" values="2;4;2" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="15" cy="-50" r="2" fill="#00b4d8">
+      <animate attributeName="r" values="2;4;2" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+</svg>

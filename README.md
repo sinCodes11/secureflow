@@ -1,8 +1,14 @@
 # SecureFlow: n8n Security Incident Response Automation
 
 <div align="center">
-  <img src="https://lottie.host/6f7b8e5a-1b2c-4d3e-8f9a-0b1c2d3e4f5g/flow_anim.gif" width="200" height="200" />
+  <img src="assets/logo.svg" width="200" height="200" />
 </div>
+
+<p align="center">
+  <a href="#"><img src="https://img.shields.io/badge/Lottie-dotLottie-00ff88?style=flat-square" alt="Lottie"></a>
+  <a href="#"><img src="https://img.shields.io/badge/n8n-workflow-00b4d8?style=flat-square" alt="n8n"></a>
+  <a href="#"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"></a>
+</p>
 
 ## Purpose
 Automated security incident response orchestration platform that processes alerts from multiple sources, enriches with threat intelligence, and executes response playbooks via n8n workflows with sub-5-second response times.
@@ -240,6 +246,34 @@ SecureFlow/
 3. Walk through automated response playbook
 4. Display audit trail and compliance metrics
 5. Explain integration with other portfolio projects
+
+## Lottie Animation Integration
+
+Animate incident response workflows with [dotLottie](https://dotlottie.io/):
+
+```html
+<dotlottie-wc
+  src="https://lottie.host/4db68bbd-31f6-4cd8-84eb-189de081159a/IGmMCqhzpt.lottie"
+  autoplay
+  loop
+></dotlottie-wc>
+<script type="module" src="https://unpkg.com/@lottiefiles/dotlottie-wc@latest/dist/dotlottie-wc.js"></script>
+```
+
+```bash
+npm install @lottiefiles/dotlottie-web
+```
+
+```js
+import { DotLottie } from '@lottiefiles/dotlottie-web'
+
+const player = new DotLottie({
+  canvas: document.getElementById('flow-canvas'),
+  src: '/animations/incident-response.lottie',
+  autoplay: true,
+  loop: true,
+})
+```
 
 ## License
 MIT License - Suitable for portfolio demonstration
