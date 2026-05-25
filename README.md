@@ -1,5 +1,9 @@
 # SecureFlow: n8n Security Incident Response Automation
 
+<div align="center">
+  <img src="https://lottie.host/6f7b8e5a-1b2c-4d3e-8f9a-0b1c2d3e4f5g/flow_anim.gif" width="200" height="200" />
+</div>
+
 ## Purpose
 Automated security incident response orchestration platform that processes alerts from multiple sources, enriches with threat intelligence, and executes response playbooks via n8n workflows with sub-5-second response times.
 
