@@ -1,8 +1,13 @@
-# SecureFlow — n8n Security Incident Response Automation
-
 <div align="center">
-  <img src="assets/banner.svg" width="100%" />
+  <img src="assets/banner.svg" width="100%"/>
 </div>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/automation-n8n-ff0033?style=flat-square" alt="automation">
+  <img src="https://img.shields.io/badge/SOAR-incident_response-00ff88?style=flat-square" alt="SOAR">
+  <img src="https://img.shields.io/badge/enrichment-VirusTotal-3949ab?style=flat-square" alt="enrichment">
+</p>
+
 
 <p align="center">
   <img src="https://img.shields.io/badge/n8n-workflow-00b4d8?style=flat-square" alt="n8n">
